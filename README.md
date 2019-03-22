@@ -31,3 +31,14 @@ sudo ./luarocks install torch
 sudo ./luarocks install nn
 sudo ./luarocks install dpnn
 ```
+
+## Install torch on Jetson
+comment out the following lines:
+```
+# torch/extra/cutorch/lib/THC/generic/THCTensorMath.cu
+393:  // THArgCheck(n > 1 || (n == 1 && (a == b)), 3, "invalid number of points");
+414:  // THArgCheck(n > 1 || (n == 1 && (a == b)), 3, "invalid number of points");
+
+# torch/extra/cutorch/lib/THC/generic/THCTensorMathPairwise.cu
+66 :  // THArgCheck(value != ScalarConvert<int, real>::to(0), 3, "divide by zero");
+```
