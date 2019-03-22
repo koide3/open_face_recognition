@@ -1,0 +1,4 @@
+sensor_msgs/Image lhs
+sensor_msgs/Image rhs
+---
+float32 result
