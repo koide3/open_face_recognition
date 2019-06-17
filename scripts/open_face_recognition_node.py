@@ -7,13 +7,13 @@ import rospkg
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension, MultiArrayLayout
 from cv_bridge import CvBridge
 from open_face_recognition.srv import *
-import openface
 
 
 # wrapper for openface
 class OpenFaceEmbedding:
 	# constructor
 	def __init__(self, image_dim, shape_predictor_path, network_path):
+		import openface
 		print 'network_path', network_path
 		print 'loading network...',
 		self.image_dim = image_dim
@@ -59,6 +59,19 @@ class OpenFaceEmbedding:
 		right = int(rgb_image.shape[1] * 0.85)
 		return dlib.rectangle(top, left, bottom, right)
 
+
+class FaceNetEmbedding:
+	def __init__(self):
+		import tensorflow as tf
+
+		with tf.Graph().as_default():
+			gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
+			sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
+			with sess.as_default():
+				pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
+
+	def embed(self, bgr_image, is_rgb=False):
+		pass
 
 # ros node
 class OpenFaceRecognition:
@@ -126,5 +139,10 @@ class OpenFaceRecognition:
 		return res
 
 if __name__ == '__main__':
-	rec = OpenFaceRecognition()
-	rospy.spin()
+	# rec = OpenFaceRecognition()
+	# rospy.spin()
+
+	embed = FaceNetEmbedding()
+	face_img = cv2.imread('/tmp/test.jpg')
+
+	embed.embed(face_img)
