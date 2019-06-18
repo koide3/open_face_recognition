@@ -23,7 +23,7 @@ class OpenFaceEmbedding:
 
 	# this method calculates a real vector which represents the given face image
 	def embed(self, bgr_image, is_rgb=False):
-
+		import openface
 		rgb_image = bgr_image
 		if not is_rgb:
 			rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
@@ -61,6 +61,8 @@ class OpenFaceEmbedding:
 
 
 # wrapper for facenet
+# @ref https://github.com/davidsandberg/facenet/blob/master/src/compare.py
+# @ref https://github.com/davidsandberg/facenet/blob/master/src/align/detect_face.py
 class FaceNetEmbedding:
 	def __init__(self):
 		import tensorflow as tf
@@ -162,7 +164,7 @@ class OpenFaceRecognition:
 		self.get_parameters()
 		self.bridge = CvBridge()
 
-		embedding_framework = rospy.get_param('embedding_framework', 'facenet')
+		embedding_framework = rospy.get_param('~embedding_framework', 'facenet')
 		if embedding_framework == 'openface':
 			self.embedding = OpenFaceEmbedding(self.image_dim, self.shape_predictor_path, self.network_path)
 		elif embedding_framework == 'facenet':
@@ -174,7 +176,7 @@ class OpenFaceRecognition:
 	# TODO: use dynamic reconfigure
 	def get_parameters(self):
 		package_path = rospkg.RosPack().get_path('open_face_recognition')
-		self.image_dim = rospy.get_param('image_dim', 96)
+		self.image_dim = rospy.get_param('image_dim', 250)
 		self.shape_predictor_path = package_path + rospy.get_param('shape_predictor_path', '/data/shape_predictor_68_face_landmarks.dat')
 		self.network_path = package_path + rospy.get_param('network_path', '/data/nn4.small2.v1.t7')
 

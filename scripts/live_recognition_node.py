@@ -6,13 +6,14 @@ import rospy
 import itertools
 from cv_bridge import CvBridge
 from sensor_msgs.msg import *
-from face_comparing.srv import *
+from open_face_recognition.srv import *
 
 
 # ros node
 class LiveRecognitionNode:
 	# constructor
 	def __init__(self):
+		print 'init'
 		self.cfg_callback()
 		self.cv_bridge = CvBridge()
 		self.detector = dlib.get_frontal_face_detector()
@@ -20,7 +21,9 @@ class LiveRecognitionNode:
 		self.feat_service = rospy.ServiceProxy('/calc_image_features', CalcImageFeatures)
 		self.image_sub = rospy.Subscriber(rospy.get_param('~topic', '/image'), Image, self.image_callback, queue_size=1, buff_size=2**24)
 
+		self.input_image = None
 		self.registred_faces = []
+		print 'done'
 
 	# TODO: use dynamic reconfigure
 	def cfg_callback(self):
@@ -28,6 +31,13 @@ class LiveRecognitionNode:
 		self.threshold = float(rospy.get_param('~threshold', '0.8'))
 
 	def image_callback(self, image_msg):
+		self.input_image = image_msg
+
+	def spin(self):
+		if self.input_image is None:
+			return
+
+		image_msg, self.input_image = self.input_image, None
 		image = self.cv_bridge.imgmsg_to_cv2(image_msg, 'bgr8')
 		scale = float(self.image_width) / image.shape[1]
 		image = cv2.resize(image, (self.image_width, int(image.shape[0] * scale)))
@@ -114,4 +124,7 @@ class LiveRecognitionNode:
 if __name__ == '__main__':
 	rospy.init_node('live_recognition_node')
 	rec = LiveRecognitionNode()
-	rospy.spin()
+
+	rate = rospy.Rate(50)
+	while not rospy.is_shutdown():
+		rec.spin()
