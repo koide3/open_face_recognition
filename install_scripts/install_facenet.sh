@@ -1,7 +1,7 @@
 #!/bin/bash
 
 cd ..
-echo "PYTHONPATH=\$PYTHONPATH:$(pwd)/thirdparty/facenet/src" >> ~/.bashrc
+echo "export PYTHONPATH=\$PYTHONPATH:$(pwd)/thirdparty/facenet/src" >> ~/.bashrc
 
 sudo pip install -r $(pwd)/thirdparty/facenet/requirements.txt
 

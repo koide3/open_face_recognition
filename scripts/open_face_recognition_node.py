@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import cv2
-import dlib
+# import dlib
 import numpy
 import rospy
 import rospkg
@@ -60,18 +60,95 @@ class OpenFaceEmbedding:
 		return dlib.rectangle(top, left, bottom, right)
 
 
+# wrapper for facenet
 class FaceNetEmbedding:
 	def __init__(self):
 		import tensorflow as tf
+		import align.detect_face
+		import facenet
+
+		self.image_size = 160
+
+		package_path = rospkg.RosPack().get_path('open_face_recognition')
+		align_model_path = package_path + '/thirdparty/facenet/src/align'
 
 		with tf.Graph().as_default():
 			gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
-			sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
-			with sess.as_default():
-				pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
+			sess0 = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
+			with sess0.as_default():
+				self.pnet, self.rnet, self.onet = align.detect_face.create_mtcnn(sess0, align_model_path)
+
+		with tf.Graph().as_default():
+			self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
+			with self.sess.as_default():
+				facenet.load_model(package_path + '/data/facenet')
+				self.images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+				self.embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+				self.phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
+
+				# self.feed_dict = {images_placeholder: images, phase_train_placeholder: False}
+				# self.emb = sess.run(embeddings, feed_dict=feed_dict)
 
 	def embed(self, bgr_image, is_rgb=False):
-		pass
+		print 'embedding'
+		image = bgr_image if not is_rgb else cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
+		aligned = self.align(image)
+
+		if aligned is None:
+			return None
+
+		images = numpy.expand_dims(aligned, 0)
+
+		feed_dict = {self.images_placeholder: images, self.phase_train_placeholder: False}
+		emb = self.sess.run(self.embeddings, feed_dict=feed_dict)
+
+		return emb.flatten()
+
+	def align(self, image):
+		import align.detect_face
+		from scipy import misc
+		import facenet
+
+		minsize = 20                  # minimum size of face
+		threshold = [0.6, 0.7, 0.7]   # three steps's threshold
+		factor = 0.709                # scale factor
+		margin = 44
+		bounding_boxes, _ = align.detect_face.detect_face(image, minsize, self.pnet, self.rnet, self.onet, threshold, factor)
+
+		n_faces = bounding_boxes.shape[0]
+
+		if n_faces <= 0:
+			print 'failed to detect face...'
+			return None
+
+		det = bounding_boxes[:, 0:4]
+		det_arr = []
+		img_size = numpy.asarray(image.shape)[0:2]
+
+		if n_faces > 1:
+			bounding_box_size = (det[:, 2]-det[:, 0])*(det[:, 3]-det[:, 1])
+			img_center = img_size / 2
+			offsets = numpy.vstack([(det[:, 0]+det[:, 2]) / 2 - img_center[1], (det[:, 1]+det[:, 3]) / 2 - img_center[0]])
+			offset_dist_squared = numpy.sum(numpy.power(offsets, 2.0), 0)
+			index = numpy.argmax(bounding_box_size - offset_dist_squared * 2.0)   # some extra weight on the centering
+			det_arr.append(det[index, :])
+		else:
+			det_arr.append(numpy.squeeze(det))
+
+		det = numpy.squeeze(det)
+		bb = numpy.zeros(4, dtype=numpy.int32)
+		bb = numpy.zeros(4, dtype=numpy.int32)
+		bb[0] = numpy.maximum(det[0]-margin/2, 0)
+		bb[1] = numpy.maximum(det[1]-margin/2, 0)
+		bb[2] = numpy.minimum(det[2]+margin/2, img_size[1])
+		bb[3] = numpy.minimum(det[3]+margin/2, img_size[0])
+		cropped = image[bb[1]: bb[3], bb[0]: bb[2], :]
+
+		aligned = misc.imresize(cropped, (self.image_size, self.image_size), interp='bilinear')
+		prewhitened = facenet.prewhiten(aligned)
+
+		return prewhitened
+
 
 # ros node
 class OpenFaceRecognition:
@@ -84,7 +161,14 @@ class OpenFaceRecognition:
 
 		self.get_parameters()
 		self.bridge = CvBridge()
-		self.embedding = OpenFaceEmbedding(self.image_dim, self.shape_predictor_path, self.network_path)
+
+		embedding_framework = rospy.get_param('embedding_framework', 'facenet')
+		if embedding_framework == 'openface':
+			self.embedding = OpenFaceEmbedding(self.image_dim, self.shape_predictor_path, self.network_path)
+		elif embedding_framework == 'facenet':
+			self.embedding = FaceNetEmbedding()
+
+		print 'ready'
 
 	# getting parameters from rosparam
 	# TODO: use dynamic reconfigure
@@ -139,10 +223,5 @@ class OpenFaceRecognition:
 		return res
 
 if __name__ == '__main__':
-	# rec = OpenFaceRecognition()
-	# rospy.spin()
-
-	embed = FaceNetEmbedding()
-	face_img = cv2.imread('/tmp/test.jpg')
-
-	embed.embed(face_img)
+	rec = OpenFaceRecognition()
+	rospy.spin()
